@@ -8,7 +8,9 @@ was originally going to do js to experience the lawless hell that it is as a c/c
 - [ ] expand todo list
 
 ## Notes
-none for now
+using make for a typescript project is actually so funny to me
+
+the most cpp dev ahhh setup being used for WEB DEVELOPEMENT.
 
 ## Ai use
 im gonna be so fr im def using ai on this project
