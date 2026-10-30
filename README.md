@@ -16,3 +16,5 @@ the most cpp dev ahhh setup being used for WEB DEVELOPEMENT.
 im gonna be so fr im def using ai on this project
 
 I am NOT super serious about typescript so I'd rather get it done fast then put in a ton of effort to learn a whole lot of stuff about it.
+
+test commit for github pages
