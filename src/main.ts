@@ -74,8 +74,6 @@ function draw(): void {
   // Draw a little label.
   ctx.fillStyle = "#ffffff";
   ctx.font = "16px monospace";
-  ctx.fillText("Hello, TypeScript!", 20, 30);
-  ctx.fillText("Use the arrow keys to move.", 20, 54);
 }
 
 function frame(now: number): void {
