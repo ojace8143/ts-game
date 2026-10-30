@@ -175,6 +175,16 @@ function startGame(name: string): void {
 
 const keys = new Set<string>();
 
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  return (
+    target.tagName === "INPUT" ||
+    target.tagName === "TEXTAREA" ||
+    target.tagName === "SELECT"
+  );
+}
+
 function isMovementKey(key: string): boolean {
   const lower = key.toLowerCase();
   return (
@@ -187,6 +197,9 @@ function isMovementKey(key: string): boolean {
 }
 
 window.addEventListener("keydown", (event) => {
+  // Let people type W/A/S/D into the name field without stealing the keys.
+  if (isTypingTarget(event.target)) return;
+
   if (isMovementKey(event.key)) {
     event.preventDefault();
     keys.add(event.key);

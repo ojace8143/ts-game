@@ -145,6 +145,15 @@ function startGame(name) {
 }
 // --- Input ---------------------------------------------------------------
 const keys = new Set();
+function isTypingTarget(target) {
+    if (!(target instanceof HTMLElement))
+        return false;
+    if (target.isContentEditable)
+        return true;
+    return (target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT");
+}
 function isMovementKey(key) {
     const lower = key.toLowerCase();
     return (key.startsWith("Arrow") ||
@@ -154,6 +163,9 @@ function isMovementKey(key) {
         lower === "d");
 }
 window.addEventListener("keydown", (event) => {
+    // Let people type W/A/S/D into the name field without stealing the keys.
+    if (isTypingTarget(event.target))
+        return;
     if (isMovementKey(event.key)) {
         event.preventDefault();
         keys.add(event.key);
