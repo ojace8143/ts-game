@@ -1,33 +1,155 @@
-const canvas = document.querySelector<HTMLCanvasElement>("#game");
+import {
+  GAME_HEIGHT,
+  GAME_WIDTH,
+  NET_INTERVAL_MS,
+  PLAYER_SIZE,
+  SPEED,
+} from "./config.js";
+import { DEFAULT_ROOM, getRoomFromUrl, Net, setRoomInUrl, type NetStatus } from "./net.js";
+import type { PlayerState } from "./types.js";
 
-if (!canvas) {
-  throw new Error("Could not find game canvas!");
-}
+const canvas = document.querySelector<HTMLCanvasElement>("#game");
+if (!canvas) throw new Error("Could not find game canvas!");
 
 const gameCtx = canvas.getContext("2d");
+if (!gameCtx) throw new Error("Could not get 2D rendering context!");
 
-if (!gameCtx) {
-  throw new Error("Could not get 2D rendering context!");
+const ctx: CanvasRenderingContext2D = gameCtx;
+
+const statusEl = document.querySelector<HTMLElement>("#status");
+const roomEl = document.querySelector<HTMLElement>("#room-code");
+const countEl = document.querySelector<HTMLElement>("#player-count");
+const copyEl = document.querySelector<HTMLButtonElement>("#copy-link");
+
+// --- Identity ------------------------------------------------------------
+
+const ADJECTIVES = [
+  "Swift", "Sleepy", "Angry", "Lucky", "Tiny", "Cosmic", "Silent", "Neon",
+  "Fuzzy", "Brave", "Wobbly", "Sneaky", "Grumpy", "Sunny", "Rusty", "Wild",
+];
+
+const ANIMALS = [
+  "Fox", "Otter", "Frog", "Panda", "Wolf", "Moth", "Gecko", "Crow",
+  "Llama", "Squid", "Badger", "Koala", "Raven", "Bison", "Newt", "Yak",
+];
+
+function randomName(): string {
+  const adjective = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
+  const animal = ANIMALS[Math.floor(Math.random() * ANIMALS.length)];
+  return `${adjective}${animal}`;
 }
 
-// Narrow to non-null locals so the closures below can use them freely.
-const ctx: CanvasRenderingContext2D = gameCtx;
-const gameCanvas: HTMLCanvasElement = canvas;
+const myName = randomName();
 
-// Player square.
-const PLAYER_SIZE = 40;
-const SPEED = 300; // pixels per second
+// --- Room ----------------------------------------------------------------
 
-const player = {
-  x: 380,
-  y: 280,
+const room = getRoomFromUrl() ?? DEFAULT_ROOM;
+setRoomInUrl(room);
+
+if (roomEl) roomEl.textContent = room;
+
+// --- Players -------------------------------------------------------------
+
+interface RemotePlayer extends PlayerState {
+  renderX: number;
+  renderY: number;
+}
+
+const local: PlayerState = {
+  id: "",
+  name: myName,
+  color: "#00ff66",
+  x: (GAME_WIDTH - PLAYER_SIZE) / 2,
+  y: (GAME_HEIGHT - PLAYER_SIZE) / 2,
 };
 
-// Which arrow keys are currently held down.
+const remotes = new Map<string, RemotePlayer>();
+
+const net = new Net(room, myName);
+
+function updateCount(): void {
+  if (!countEl) return;
+  const total = remotes.size + 1;
+  countEl.textContent = total === 1 ? "1 player" : `${total} players`;
+}
+
+function describeStatus(status: NetStatus): string {
+  switch (status.kind) {
+    case "connecting":
+      return status.detail;
+    case "hosting":
+      return `Hosting room ${status.room}. Share the link to invite people.`;
+    case "connected":
+      return `Connected to room ${status.room}.`;
+    case "reconnecting":
+      return status.detail;
+    case "error":
+      return status.detail;
+  }
+}
+
+net.handlers = {
+  onStatus(status) {
+    if (statusEl) statusEl.textContent = describeStatus(status);
+  },
+  onSelfId(id) {
+    local.id = id;
+    local.color = net.color;
+  },
+  onReset() {
+    remotes.clear();
+    updateCount();
+  },
+  onJoin(player) {
+    if (player.id === net.selfId) return;
+    remotes.set(player.id, {
+      ...player,
+      renderX: player.x,
+      renderY: player.y,
+    });
+    updateCount();
+  },
+  onState(player) {
+    if (player.id === net.selfId) return;
+
+    const remote = remotes.get(player.id);
+    if (!remote) {
+      remotes.set(player.id, {
+        ...player,
+        renderX: player.x,
+        renderY: player.y,
+      });
+    } else {
+      remote.x = player.x;
+      remote.y = player.y;
+      remote.name = player.name;
+      remote.color = player.color;
+    }
+    updateCount();
+  },
+  onLeave(id) {
+    remotes.delete(id);
+    updateCount();
+  },
+};
+
+// --- Input ---------------------------------------------------------------
+
 const keys = new Set<string>();
 
+function isMovementKey(key: string): boolean {
+  const lower = key.toLowerCase();
+  return (
+    key.startsWith("Arrow") ||
+    lower === "w" ||
+    lower === "a" ||
+    lower === "s" ||
+    lower === "d"
+  );
+}
+
 window.addEventListener("keydown", (event) => {
-  if (event.key.startsWith("Arrow")) {
+  if (isMovementKey(event.key)) {
     event.preventDefault();
     keys.add(event.key);
   }
@@ -37,47 +159,115 @@ window.addEventListener("keyup", (event) => {
   keys.delete(event.key);
 });
 
+window.addEventListener("blur", () => {
+  keys.clear();
+});
+
+// --- Game loop -----------------------------------------------------------
+
 let lastTime = performance.now();
+let sendAccumulator = 0;
 
 function update(dt: number): void {
   let dx = 0;
   let dy = 0;
 
-  if (keys.has("ArrowLeft")) dx -= 1;
-  if (keys.has("ArrowRight")) dx += 1;
-  if (keys.has("ArrowUp")) dy -= 1;
-  if (keys.has("ArrowDown")) dy += 1;
+  if (keys.has("ArrowLeft") || keys.has("a") || keys.has("A")) dx -= 1;
+  if (keys.has("ArrowRight") || keys.has("d") || keys.has("D")) dx += 1;
+  if (keys.has("ArrowUp") || keys.has("w") || keys.has("W")) dy -= 1;
+  if (keys.has("ArrowDown") || keys.has("s") || keys.has("S")) dy += 1;
 
-  // Normalize so diagonal movement isn't faster.
   if (dx !== 0 && dy !== 0) {
     dx *= Math.SQRT1_2;
     dy *= Math.SQRT1_2;
   }
 
-  player.x += dx * SPEED * dt;
-  player.y += dy * SPEED * dt;
+  local.x += dx * SPEED * dt;
+  local.y += dy * SPEED * dt;
 
-  // Keep the square inside the canvas.
-  player.x = Math.max(0, Math.min(gameCanvas.width - PLAYER_SIZE, player.x));
-  player.y = Math.max(0, Math.min(gameCanvas.height - PLAYER_SIZE, player.y));
+  local.x = Math.max(0, Math.min(GAME_WIDTH - PLAYER_SIZE, local.x));
+  local.y = Math.max(0, Math.min(GAME_HEIGHT - PLAYER_SIZE, local.y));
+
+  // Smooth out remote squares between network updates.
+  const smoothing = 1 - Math.exp(-12 * dt);
+  for (const remote of remotes.values()) {
+    remote.renderX += (remote.x - remote.renderX) * smoothing;
+    remote.renderY += (remote.y - remote.renderY) * smoothing;
+  }
+
+  sendAccumulator += dt * 1000;
+  if (sendAccumulator >= NET_INTERVAL_MS) {
+    sendAccumulator = 0;
+    net.publish(local.x, local.y);
+  }
+}
+
+function drawGrid(): void {
+  ctx.fillStyle = "#111111";
+  ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+  ctx.strokeStyle = "#1b1b1b";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = 0; x <= GAME_WIDTH; x += 40) {
+    ctx.moveTo(x + 0.5, 0);
+    ctx.lineTo(x + 0.5, GAME_HEIGHT);
+  }
+  for (let y = 0; y <= GAME_HEIGHT; y += 40) {
+    ctx.moveTo(0, y + 0.5);
+    ctx.lineTo(GAME_WIDTH, y + 0.5);
+  }
+  ctx.stroke();
+}
+
+function drawPlayer(player: PlayerState, isSelf: boolean): void {
+  const x = Math.round(player.x);
+  const y = Math.round(player.y);
+
+  if (isSelf) {
+    ctx.shadowColor = player.color;
+    ctx.shadowBlur = 16;
+  }
+
+  ctx.fillStyle = player.color;
+  ctx.fillRect(x, y, PLAYER_SIZE, PLAYER_SIZE);
+
+  ctx.shadowBlur = 0;
+  ctx.shadowColor = "transparent";
+
+  if (isSelf) {
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x + 1, y + 1, PLAYER_SIZE - 2, PLAYER_SIZE - 2);
+  }
+
+  ctx.fillStyle = isSelf ? "#ffffff" : "#dddddd";
+  ctx.font = "13px monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  const labelY = y - 7 < 12 ? y + 15 : y - 7;
+  ctx.fillText(isSelf ? `${player.name} (you)` : player.name, x + PLAYER_SIZE / 2, labelY);
 }
 
 function draw(): void {
-  // Clear the background.
-  ctx.fillStyle = "#111111";
-  ctx.fillRect(0, 0, gameCanvas.width, gameCanvas.height);
+  drawGrid();
 
-  // Draw our player.
-  ctx.fillStyle = "#00ff66";
-  ctx.fillRect(player.x, player.y, PLAYER_SIZE, PLAYER_SIZE);
+  for (const remote of remotes.values()) {
+    drawPlayer(
+      {
+        ...remote,
+        x: remote.renderX,
+        y: remote.renderY,
+      },
+      false,
+    );
+  }
 
-  // Draw a little label.
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "16px monospace";
+  drawPlayer(local, true);
 }
 
 function frame(now: number): void {
-  const dt = (now - lastTime) / 1000;
+  const dt = Math.min((now - lastTime) / 1000, 0.05);
   lastTime = now;
 
   update(dt);
@@ -85,4 +275,29 @@ function frame(now: number): void {
   requestAnimationFrame(frame);
 }
 
+// --- Copy invite link ----------------------------------------------------
+
+copyEl?.addEventListener("click", async () => {
+  const original = copyEl.textContent;
+
+  try {
+    await navigator.clipboard.writeText(window.location.href);
+    copyEl.textContent = "copied!";
+  } catch {
+    copyEl.textContent = "copy failed";
+  }
+
+  window.setTimeout(() => {
+    copyEl.textContent = original;
+  }, 1500);
+});
+
+window.addEventListener("beforeunload", () => {
+  net.stop();
+});
+
+// --- Go ------------------------------------------------------------------
+
+updateCount();
+net.start();
 requestAnimationFrame(frame);

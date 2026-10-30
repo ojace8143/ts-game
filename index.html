@@ -5,25 +5,102 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ojace8143's typescript game</title>
     <style>
+        :root {
+            color-scheme: dark;
+        }
+
         body {
             margin: 0;
+            padding: 24px 16px;
+            box-sizing: border-box;
             background: #111;
             color: #eee;
             font-family: monospace;
-            display: grid;
-            place-items: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
             min-height: 100vh;
+        }
+
+        h2 {
+            margin: 0;
+            font-size: 20px;
+            font-weight: normal;
+            letter-spacing: 1px;
+        }
+
+        #status {
+            margin: 0;
+            min-height: 1.2em;
+            max-width: 800px;
+            text-align: center;
+            color: #8a8a8a;
+            font-size: 13px;
         }
 
         canvas {
             border: 1px solid #444;
+            max-width: 100%;
+            height: auto;
+            display: block;
+            touch-action: none;
+        }
+
+        .hud {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            font-size: 14px;
+            color: #9a9a9a;
+        }
+
+        #room-code {
+            color: #00ff66;
+            letter-spacing: 2px;
+        }
+
+        button {
+            background: #1c1c1c;
+            color: #eee;
+            border: 1px solid #444;
+            border-radius: 3px;
+            padding: 6px 12px;
+            font: inherit;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        button:hover,
+        button:focus-visible {
+            border-color: #00ff66;
+            color: #00ff66;
+            outline: none;
+        }
+
+        .hint {
+            margin: 0;
+            color: #5c5c5c;
+            font-size: 12px;
         }
     </style>
 </head>
 <body>
     <h2>typescript game</h2>
+    <p id="status">connecting…</p>
     <canvas id="game" width="800" height="600"></canvas>
+    <div class="hud">
+        <span>room <strong id="room-code">------</strong></span>
+        <button id="copy-link" type="button">copy invite link</button>
+        <span id="player-count">1 player</span>
+    </div>
+    <p class="hint">arrows / WASD to move</p>
+
+    <!-- PeerJS handles WebRTC signaling; the game traffic itself is peer-to-peer. -->
+    <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js"></script>
     <script type="module" src="./dist/main.js"></script>
 </body>
 </html>
-
