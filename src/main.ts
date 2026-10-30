@@ -20,6 +20,10 @@ const statusEl = document.querySelector<HTMLElement>("#status");
 const roomEl = document.querySelector<HTMLElement>("#room-code");
 const countEl = document.querySelector<HTMLElement>("#player-count");
 const copyEl = document.querySelector<HTMLButtonElement>("#copy-link");
+const menuEl = document.querySelector<HTMLElement>("#menu");
+const gameViewEl = document.querySelector<HTMLElement>("#game-view");
+const nameInput = document.querySelector<HTMLInputElement>("#name-input");
+const joinForm = document.querySelector<HTMLFormElement>("#join-form");
 
 // --- Identity ------------------------------------------------------------
 
@@ -39,7 +43,22 @@ function randomName(): string {
   return `${adjective}${animal}`;
 }
 
-const myName = randomName();
+const NAME_STORAGE_KEY = "tsgame:name";
+
+function normalizeName(raw: string): string {
+  const cleaned = raw.replace(/[\u0000-\u001f]/g, "").trim().slice(0, 16);
+  return cleaned.length > 0 ? cleaned : randomName();
+}
+
+function rememberedName(): string {
+  try {
+    const saved = localStorage.getItem(NAME_STORAGE_KEY);
+    if (saved) return normalizeName(saved);
+  } catch {
+    // localStorage can be unavailable; just fall back to a random name.
+  }
+  return randomName();
+}
 
 // --- Room ----------------------------------------------------------------
 
@@ -57,7 +76,7 @@ interface RemotePlayer extends PlayerState {
 
 const local: PlayerState = {
   id: "",
-  name: myName,
+  name: "",
   color: "#00ff66",
   x: (GAME_WIDTH - PLAYER_SIZE) / 2,
   y: (GAME_HEIGHT - PLAYER_SIZE) / 2,
@@ -65,7 +84,8 @@ const local: PlayerState = {
 
 const remotes = new Map<string, RemotePlayer>();
 
-const net = new Net(room, myName);
+let net: Net | null = null;
+let running = false;
 
 function updateCount(): void {
   if (!countEl) return;
@@ -88,50 +108,68 @@ function describeStatus(status: NetStatus): string {
   }
 }
 
-net.handlers = {
-  onStatus(status) {
-    if (statusEl) statusEl.textContent = describeStatus(status);
-  },
-  onSelfId(id) {
-    local.id = id;
-    local.color = net.color;
-  },
-  onReset() {
-    remotes.clear();
-    updateCount();
-  },
-  onJoin(player) {
-    if (player.id === net.selfId) return;
-    remotes.set(player.id, {
-      ...player,
-      renderX: player.x,
-      renderY: player.y,
-    });
-    updateCount();
-  },
-  onState(player) {
-    if (player.id === net.selfId) return;
+// --- Join / start --------------------------------------------------------
 
-    const remote = remotes.get(player.id);
-    if (!remote) {
+function startGame(name: string): void {
+  if (running) return;
+  running = true;
+
+  const gameNet = new Net(room, name);
+  net = gameNet;
+  local.name = name;
+
+  gameNet.handlers = {
+    onStatus(status) {
+      if (statusEl) statusEl.textContent = describeStatus(status);
+    },
+    onSelfId(id) {
+      local.id = id;
+      local.color = gameNet.color;
+    },
+    onReset() {
+      remotes.clear();
+      updateCount();
+    },
+    onJoin(player) {
+      if (player.id === gameNet.selfId) return;
       remotes.set(player.id, {
         ...player,
         renderX: player.x,
         renderY: player.y,
       });
-    } else {
-      remote.x = player.x;
-      remote.y = player.y;
-      remote.name = player.name;
-      remote.color = player.color;
-    }
-    updateCount();
-  },
-  onLeave(id) {
-    remotes.delete(id);
-    updateCount();
-  },
-};
+      updateCount();
+    },
+    onState(player) {
+      if (player.id === gameNet.selfId) return;
+
+      const remote = remotes.get(player.id);
+      if (!remote) {
+        remotes.set(player.id, {
+          ...player,
+          renderX: player.x,
+          renderY: player.y,
+        });
+      } else {
+        remote.x = player.x;
+        remote.y = player.y;
+        remote.name = player.name;
+        remote.color = player.color;
+      }
+      updateCount();
+    },
+    onLeave(id) {
+      remotes.delete(id);
+      updateCount();
+    },
+  };
+
+  if (menuEl) menuEl.hidden = true;
+  if (gameViewEl) gameViewEl.hidden = false;
+
+  lastTime = performance.now();
+  requestAnimationFrame(frame);
+  gameNet.start();
+}
 
 // --- Input ---------------------------------------------------------------
 
@@ -198,7 +236,7 @@ function update(dt: number): void {
   sendAccumulator += dt * 1000;
   if (sendAccumulator >= NET_INTERVAL_MS) {
     sendAccumulator = 0;
-    net.publish(local.x, local.y);
+    net?.publish(local.x, local.y);
   }
 }
 
@@ -293,11 +331,30 @@ copyEl?.addEventListener("click", async () => {
 });
 
 window.addEventListener("beforeunload", () => {
-  net.stop();
+  net?.stop();
 });
 
-// --- Go ------------------------------------------------------------------
+// --- Menu ----------------------------------------------------------------
+
+joinForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+
+  const name = normalizeName(nameInput?.value ?? "");
+  if (nameInput) nameInput.value = name;
+
+  try {
+    localStorage.setItem(NAME_STORAGE_KEY, name);
+  } catch {
+    // Not fatal: the name just won't be remembered next time.
+  }
+
+  startGame(name);
+});
+
+if (nameInput) {
+  nameInput.value = rememberedName();
+  nameInput.focus();
+  nameInput.select();
+}
 
 updateCount();
-net.start();
-requestAnimationFrame(frame);

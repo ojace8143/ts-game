@@ -9,6 +9,10 @@
             color-scheme: dark;
         }
 
+        [hidden] {
+            display: none !important;
+        }
+
         body {
             margin: 0;
             padding: 24px 16px;
@@ -29,6 +33,62 @@
             font-size: 20px;
             font-weight: normal;
             letter-spacing: 1px;
+        }
+
+        #menu {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .tagline {
+            margin: 0;
+            color: #6f6f6f;
+            font-size: 13px;
+        }
+
+        #join-form {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        #join-form label {
+            color: #9a9a9a;
+            font-size: 11px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .join-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        input[type="text"] {
+            width: 200px;
+            padding: 7px 10px;
+            background: #1c1c1c;
+            border: 1px solid #444;
+            border-radius: 3px;
+            color: #eee;
+            font: inherit;
+            font-size: 14px;
+        }
+
+        input[type="text"]:focus {
+            border-color: #00ff66;
+            outline: none;
+        }
+
+        #game-view {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
         }
 
         #status {
@@ -89,15 +149,29 @@
     </style>
 </head>
 <body>
-    <h2>typescript game</h2>
-    <p id="status">connecting…</p>
-    <canvas id="game" width="800" height="600"></canvas>
-    <div class="hud">
-        <span>room <strong id="room-code">------</strong></span>
-        <button id="copy-link" type="button">copy invite link</button>
-        <span id="player-count">1 player</span>
-    </div>
-    <p class="hint">arrows / WASD to move</p>
+    <section id="menu">
+        <h2>typescript game</h2>
+        <p class="tagline">one shared little world</p>
+        <form id="join-form" autocomplete="off">
+            <label for="name-input">your name</label>
+            <div class="join-row">
+                <input id="name-input" type="text" maxlength="16" spellcheck="false" autocomplete="off">
+                <button type="submit">join lobby</button>
+            </div>
+        </form>
+        <p class="hint">arrows / WASD to move</p>
+    </section>
+
+    <main id="game-view" hidden>
+        <p id="status">connecting…</p>
+        <canvas id="game" width="800" height="600"></canvas>
+        <div class="hud">
+            <span>room <strong id="room-code">------</strong></span>
+            <button id="copy-link" type="button">copy invite link</button>
+            <span id="player-count">1 player</span>
+        </div>
+        <p class="hint">arrows / WASD to move</p>
+    </main>
 
     <!-- PeerJS handles WebRTC signaling; the game traffic itself is peer-to-peer. -->
     <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js"></script>
